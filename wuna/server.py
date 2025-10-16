@@ -1,67 +1,104 @@
 import socket
 import threading
+import json
+from datetime import datetime
 from crypto import load_key, decrypt, encrypt
 
 # Server Configuration
-HOST = '0.0.0.0'  # Listen on all available interfaces
+HOST = '0.0.0.0'
 PORT = 65432
 
 # Global Variables
-clients = []
+clients = {}  # Dictionary to store {username: client_socket}
 key = load_key()
 
-def broadcast(message, _client_socket):
+def broadcast(message_data, sender_username=None):
     """
-    Broadcasts a message to all clients except the sender.
+    Broadcasts a message to all clients or a specific client.
     """
-    for client_socket in clients:
-        if client_socket != _client_socket:
-            try:
-                # Encrypt the message before sending
-                encrypted_message = encrypt(message, key)
-                client_socket.send(encrypted_message)
-            except:
-                # Remove the client if unable to send a message
-                clients.remove(client_socket)
+    recipient = message_data.get("recipient")
+
+    if recipient and recipient in clients:
+        # Private message
+        try:
+            encrypted_message = encrypt(json.dumps(message_data), key)
+            clients[recipient].send(encrypted_message)
+        except Exception as e:
+            print(f"Error sending private message to {recipient}: {e}")
+            clients.pop(recipient, None)
+    else:
+        # Broadcast to all except the sender
+        for username, client_socket in clients.items():
+            if username != sender_username:
+                try:
+                    encrypted_message = encrypt(json.dumps(message_data), key)
+                    client_socket.send(encrypted_message)
+                except Exception as e:
+                    print(f"Error broadcasting to {username}: {e}")
+                    clients.pop(username, None)
 
 def handle_client(client_socket):
     """
     Handles a single client connection.
     """
-    # Get and send client's username
+    username = None
     try:
         encrypted_username = client_socket.recv(1024)
         username = decrypt(encrypted_username, key)
-        welcome_message = f"Welcome {username}! You are connected to the WuNa chat."
-        client_socket.send(encrypt(welcome_message, key))
-        broadcast(f"{username} has joined the chat!", client_socket)
+
+        if username in clients:
+            # Handle username conflict
+            error_message = {"sender": "Server", "content": "Username already taken.", "timestamp": ""}
+            client_socket.send(encrypt(json.dumps(error_message), key))
+            client_socket.close()
+            return
+
+        clients[username] = client_socket
+
+        welcome_message = {
+            "sender": "Server",
+            "content": f"Welcome {username}! You are connected. Type /msg <user> <message> for private messages.",
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        client_socket.send(encrypt(json.dumps(welcome_message), key))
+
+        join_message = {
+            "sender": "Server",
+            "content": f"{username} has joined the chat!",
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        broadcast(join_message, sender_username=username)
+
     except Exception as e:
-        print(f"Error receiving username: {e}")
-        clients.remove(client_socket)
+        print(f"Error during user setup: {e}")
         client_socket.close()
         return
 
     while True:
         try:
-            # Receive and decrypt the message
             encrypted_message = client_socket.recv(1024)
             if not encrypted_message:
                 break
-            message = decrypt(encrypted_message, key)
 
-            # Prepend username to the message
-            full_message = f"{username}: {message}"
-            print(f"Received: {full_message}")
+            message_data = json.loads(decrypt(encrypted_message, key))
+            message_data["timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            message_data["sender"] = username
 
-            # Broadcast the message to other clients
-            broadcast(full_message, client_socket)
+            broadcast(message_data, sender_username=username)
 
         except:
-            # Remove the client from the list and close the connection
-            clients.remove(client_socket)
-            broadcast(f"{username} has left the chat.", client_socket)
-            client_socket.close()
             break
+
+    # Cleanup
+    clients.pop(username, None)
+    if username:
+        leave_message = {
+            "sender": "Server",
+            "content": f"{username} has left the chat.",
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        broadcast(leave_message)
+    client_socket.close()
 
 def main():
     """
@@ -73,7 +110,6 @@ def main():
 
     print(f"[*] Listening as {HOST}:{PORT}")
 
-    # Generate key if it doesn't exist
     try:
         load_key()
     except FileNotFoundError:
@@ -82,14 +118,8 @@ def main():
         print("Generated a new secret key.")
 
     while True:
-        # Accept a new connection
         client_socket, addr = server_socket.accept()
         print(f"[*] Accepted connection from {addr[0]}:{addr[1]}")
-
-        # Add the new client to the list
-        clients.append(client_socket)
-
-        # Start a new thread to handle the client
         thread = threading.Thread(target=handle_client, args=(client_socket,))
         thread.start()
 
