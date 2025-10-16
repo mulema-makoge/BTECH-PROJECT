@@ -1,55 +1,91 @@
 import socket
 import threading
+import tkinter as tk
+from tkinter import simpledialog, scrolledtext
 from crypto import load_key, encrypt, decrypt
 
 # Client Configuration
-HOST = '127.0.0.1'  # The server's hostname or IP address
-PORT = 65432        # The port used by the server
+HOST = '127.0.0.1'
+PORT = 65432
 key = load_key()
 
-def receive_messages(client_socket):
-    """
-    Receives messages from the server.
-    """
-    while True:
+class ChatClient:
+    def __init__(self, master):
+        self.master = master
+        master.title("WuNa Encrypted Chat")
+
+        # Get username
+        self.username = simpledialog.askstring("Username", "Please enter your username", parent=master)
+        if not self.username:
+            master.destroy()
+            return
+
+        # UI Elements
+        self.chat_box = scrolledtext.ScrolledText(master, state='disabled', wrap='word')
+        self.chat_box.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+        self.msg_entry = tk.Entry(master)
+        self.msg_entry.pack(padx=10, pady=(0, 10), fill=tk.X, expand=True)
+        self.msg_entry.bind("<Return>", self.send_message)
+
+        self.send_button = tk.Button(master, text="Send", command=self.send_message)
+        self.send_button.pack(padx=10, pady=(0, 10))
+
+        # Socket setup
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            # Receive and decrypt the message
-            encrypted_message = client_socket.recv(1024)
-            if not encrypted_message:
+            self.client_socket.connect((HOST, PORT))
+        except ConnectionRefusedError:
+            self.display_message("Error: Connection refused. Is the server running?")
+            self.master.after(3000, self.master.destroy)
+            return
+
+        # Send username to server
+        encrypted_username = encrypt(self.username, key)
+        self.client_socket.send(encrypted_username)
+
+        # Start a thread to receive messages
+        self.receive_thread = threading.Thread(target=self.receive_messages)
+        self.receive_thread.daemon = True
+        self.receive_thread.start()
+
+        master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def receive_messages(self):
+        while True:
+            try:
+                encrypted_message = self.client_socket.recv(1024)
+                if not encrypted_message:
+                    self.display_message("Server has closed the connection.")
+                    break
+                message = decrypt(encrypted_message, key)
+                self.display_message(message)
+            except Exception as e:
+                self.display_message(f"An error occurred: {e}")
+                self.client_socket.close()
                 break
-            message = decrypt(encrypted_message, key)
-            print(message)
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            client_socket.close()
-            break
 
-def main():
-    """
-    Main function to start the client.
-    """
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((HOST, PORT))
+    def send_message(self, event=None):
+        message = self.msg_entry.get()
+        if message:
+            encrypted_message = encrypt(message, key)
+            self.client_socket.send(encrypted_message)
+            self.msg_entry.delete(0, tk.END)
 
-    # Get username and send it to the server
-    username = input("Enter your username: ")
-    encrypted_username = encrypt(username, key)
-    client_socket.send(encrypted_username)
+    def display_message(self, message):
+        self.chat_box.config(state='normal')
+        self.chat_box.insert(tk.END, message + '\n')
+        self.chat_box.config(state='disabled')
+        self.chat_box.yview(tk.END)
 
-    # Start a thread to receive messages
-    receive_thread = threading.Thread(target=receive_messages, args=(client_socket,))
-    receive_thread.daemon = True  # Thread will die when main thread dies
-    receive_thread.start()
-
-    # Main loop to send messages
-    while True:
-        message = input()
-        if message.lower() == 'exit':
-            break
-        encrypted_message = encrypt(message, key)
-        client_socket.send(encrypted_message)
-
-    client_socket.close()
+    def on_closing(self):
+        self.client_socket.close()
+        self.master.destroy()
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    client = ChatClient(root)
+
+    # Only start the main loop if the client was initialized properly
+    if hasattr(client, 'username') and client.username:
+        root.mainloop()

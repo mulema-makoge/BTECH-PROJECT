@@ -8,6 +8,7 @@ WuNa is a lightweight, secure, and easy-to-use encrypted chat application design
 
 -   **Strong End-to-End Encryption:** Utilizes the Fernet symmetric encryption scheme from the `cryptography` library to ensure that only the sender and receiver can read the messages.
 -   **Multi-User Chat Room:** A central server broadcasts messages to all connected clients, creating a group chat environment.
+-   **Graphical User Interface:** A user-friendly GUI built with `tkinter` for a more intuitive chatting experience.
 -   **Cross-Platform:** Being a Python application, it can run on any operating system with Python installed.
 -   **Simple Setup:** No complex dependencies or configuration. Get up and running in a few simple steps.
 
@@ -88,12 +89,12 @@ Once the `secret.key` is in place, you can start the client:
 python client.py
 ```
 
-You will be prompted to enter a username. After that, you can start sending and receiving messages securely.
+A dialog box will pop up asking for your username. After entering it, the main chat window will appear, and you can start sending and receiving messages securely.
 
 ## How It Works
 
 -   **Server (`server.py`):** The server's primary role is to act as a central hub. It accepts connections from multiple clients and maintains a list of them. When it receives an encrypted message from a client, it broadcasts that message to all other connected clients without decrypting it.
--   **Client (`client.py`):** The client connects to the server and provides a user interface for the chat. When a user sends a message, the client encrypts it using the shared `secret.key` and sends it to the server. When it receives a message from the server, it decrypts it and displays it to the user.
+-   **Client (`client.py`):** The client, now with a `tkinter`-based GUI, connects to the server. It provides a chat window for displaying messages and an input field for sending them. When a user sends a message, the client encrypts it using the shared `secret.key` and sends it to the server. When it receives a message from the server, it decrypts it and displays it in the chat window.
 -   **Cryptography (`crypto.py`):** This module abstracts the encryption and decryption logic. It uses the Fernet algorithm, which ensures that a message cannot be manipulated or read without the key.
 
 ## Disclaimer
