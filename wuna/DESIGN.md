@@ -41,15 +41,17 @@ To ensure a message reaches all peers in the network, WuNa employs a **controlle
 
 ## 5. Security & Authentication Model
 
-Security is a core component of the system, based on public-key cryptography.
+WuNa v2 employs a robust, multi-layered security model to ensure confidentiality, authenticity, and integrity.
 
--   **Peer Identity:**
+-   **Peer Identity (RSA):**
     -   Each peer is identified by a unique, persistent **2048-bit RSA key pair**.
     -   These keys are generated on the first run and stored locally in the `keys/` directory. The public key serves as the peer's verifiable "address" or identifier.
--   **Authentication and Integrity:**
-    -   **Digital Signatures:** Every message sent is digitally signed with the sender's private RSA key. The signature is attached to the message.
-    -   **Verification:** When a peer receives a message, it uses the sender's public key (included in the message) to verify the signature.
-    -   **Trust Model:** If the signature is valid, the message is considered authentic (it truly came from the claimed sender) and has its integrity intact (it was not tampered with in transit). If verification fails, the message is discarded.
+-   **Authentication and Integrity (Digital Signatures):**
+    -   **Signing:** Every message's full data hash is digitally signed with the sender's private RSA key. The signature is attached to the message. The signed data includes the ciphertext of the content, ensuring that the encrypted content itself has not been tampered with.
+    -   **Verification:** When a peer receives a message, it uses the sender's public key (included in the message) to verify the signature. If verification fails, the message is discarded. This proves the message's origin and that its structure and content (even encrypted) have not been altered.
+-   **Confidentiality (Symmetric Encryption):**
+    -   **End-to-End Encryption:** The actual content of every message is end-to-end encrypted using the **Fernet** symmetric encryption scheme (AES-128 in CBC mode with PKCS7 padding, plus a 128-bit HMAC-SHA256 for integrity).
+    -   **Key Distribution Model (Pre-Shared Key):** The system uses a pre-shared key model for confidentiality. On the first run, a symmetric key is generated and saved to `keys/session.key`. For peers to communicate, they **must** share the same `session.key` file. This file must be distributed securely out-of-band to all participating peers *before* they join the network. While this is a centralized approach to key management, it is a pragmatic solution to ensure a working, secure channel without the added complexity of a dynamic key-exchange protocol.
 
 ## 6. Offline Collaboration Features
 

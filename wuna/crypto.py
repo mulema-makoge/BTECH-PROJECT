@@ -1,10 +1,12 @@
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.exceptions import InvalidSignature
+from cryptography.fernet import Fernet
 
 KEY_DIR = "keys"
 PRIVATE_KEY_FILE = f"{KEY_DIR}/private_key.pem"
 PUBLIC_KEY_FILE = f"{KEY_DIR}/public_key.pem"
+SYMMETRIC_KEY_FILE = f"{KEY_DIR}/session.key"
 
 def generate_keys():
     """
@@ -109,3 +111,41 @@ def verify_signature(public_key_pem, signature, message):
         return True
     except (InvalidSignature, ValueError):
         return False
+
+# --- Symmetric Encryption ---
+
+def load_or_generate_symmetric_key():
+    """
+    Loads the symmetric key from file, or generates a new one.
+    """
+    try:
+        with open(SYMMETRIC_KEY_FILE, 'rb') as f:
+            key = f.read()
+        print("[*] Loaded existing session key.")
+        return key
+    except FileNotFoundError:
+        print("[*] No session key found. Generating a new one...")
+        key = Fernet.generate_key()
+        with open(SYMMETRIC_KEY_FILE, 'wb') as f:
+            f.write(key)
+        return key
+
+def encrypt_message_content(symmetric_key, content):
+    """
+    Encrypts message content using the symmetric key.
+    Content should be a string.
+    Returns the ciphertext as a base64-encoded string.
+    """
+    f = Fernet(symmetric_key)
+    encrypted_content = f.encrypt(content.encode('utf-8'))
+    return encrypted_content.decode('utf-8')
+
+def decrypt_message_content(symmetric_key, encrypted_content):
+    """
+    Decrypts message content using the symmetric key.
+    Encrypted_content should be a base64-encoded string.
+    Returns the decrypted plaintext as a string.
+    """
+    f = Fernet(symmetric_key)
+    decrypted_content = f.decrypt(encrypted_content.encode('utf-8'))
+    return decrypted_content.decode('utf-8')

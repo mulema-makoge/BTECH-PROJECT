@@ -1,0 +1,20 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SQLite database files
+*.db
+*.db-journal
+
+# Private keys and other sensitive data
+keys/
+session.key
+*.pem
+
+# IDE and editor specific files
+.vscode/
+.idea/
+*.swp
+*.swo

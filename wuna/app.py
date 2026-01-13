@@ -2,13 +2,14 @@ import argparse
 import threading
 import time
 from network import Peer, Message
-from crypto import load_or_generate_keys, get_public_key_pem, sign_message
+from crypto import load_or_generate_keys, get_public_key_pem, sign_message, load_or_generate_symmetric_key, encrypt_message_content, decrypt_message_content
 from persistence import initialize_db, save_message, load_all_messages
 
 class ChatApp:
     def __init__(self, host, port):
         self.private_key, self.public_key = load_or_generate_keys()
         self.public_key_pem = get_public_key_pem(self.public_key)
+        self.symmetric_key = load_or_generate_symmetric_key()
         self.peer = Peer(host, port, self.handle_incoming_message)
 
         initialize_db()
@@ -37,7 +38,14 @@ class ChatApp:
         print("--------------------")
 
     def handle_incoming_message(self, message):
-        # Save and display the message
+        # Decrypt content before saving or displaying
+        try:
+            decrypted_content = decrypt_message_content(self.symmetric_key, message.content)
+            message.content = decrypted_content # Replace ciphertext with plaintext
+        except Exception as e:
+            print(f"\n[!] Failed to decrypt message from {message.sender_pk.splitlines()[1][:10]}...: {e}")
+            return
+
         was_new = save_message(message)
         if was_new:
             self.display_message(message)
@@ -47,8 +55,13 @@ class ChatApp:
             try:
                 content = input("> ")
                 if content:
-                    # Create and sign the message
-                    message = Message(sender_pk=self.public_key_pem, content=content)
+                    # Encrypt the content
+                    encrypted_content = encrypt_message_content(self.symmetric_key, content)
+
+                    # Create the message with encrypted content
+                    message = Message(sender_pk=self.public_key_pem, content=encrypted_content)
+
+                    # Sign the message (note: content is signed as ciphertext)
                     signature = sign_message(self.private_key, message.get_signed_data())
                     message.signature = signature
 
@@ -61,6 +74,7 @@ class ChatApp:
     def display_message(self, message):
         # Using the first 10 chars of the public key as a short identifier
         sender_short_id = message.sender_pk.splitlines()[1][:10]
+        # The content is already decrypted at this point
         print(f"\n[{message.timestamp}] {sender_short_id}...: {message.content}")
 
 def main():

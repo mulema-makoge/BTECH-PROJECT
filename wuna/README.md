@@ -7,8 +7,8 @@ WuNa v2 is a secure, decentralized, and resilient local messaging system designe
 -   **Decentralized Mesh Network:** No single point of failure. The network is formed dynamically by peers discovering each other on the local network.
 -   **Strong Security:**
     -   **Peer Identity:** Each peer has a unique, verifiable identity based on a persistent RSA public/private key pair.
-    -   **Authentication & Integrity:** Every message is digitally signed with the sender's private key, and verified by receiving peers, ensuring that messages are authentic and have not been tampered with.
-    -   **End-to-End Encryption (Placeholder):** The protocol is designed to support end-to-end encryption for message confidentiality.
+    -   **Authentication & Integrity:** Every message is digitally signed with the sender's private key and verified by receiving peers, ensuring that messages are authentic and have not been tampered with.
+    -   **Confidentiality:** Message content is protected with end-to-end encryption using Fernet (AES-128 in CBC mode with a 128-bit HMAC-SHA256 for integrity), ensuring that only the communicating peers can read the messages.
 -   **Offline Collaboration:**
     -   **Message Persistence:** All validated messages are stored in a local database, providing a persistent chat history.
     -   **Offline Queuing:** If you send a message while disconnected, it is securely queued.
@@ -60,6 +60,8 @@ python app.py
 python app.py --host 192.168.1.10 --port 9000
 ```
 
-On the first launch, a `keys/` directory will be created, and your peer's unique identity will be generated. A `chat_history.db` file will also be created to store your messages.
+On the first launch, a `keys/` directory will be created containing your peer's unique identity and a `session.key` for encryption. A `chat_history.db` file will also be created to store your messages.
+
+**Important:** For other users on the network to decrypt your messages, they must have the **exact same `session.key` file** in their `keys/` directory. After one user runs the application for the first time, you must securely copy the `keys/session.key` file from their computer to all other users' computers before they launch the application.
 
 Now, simply type your messages and press Enter. The application will handle the rest, from discovering peers to securely propagating your messages.
