@@ -1,49 +1,111 @@
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.exceptions import InvalidSignature
 
-KEY_FILE = "secret.key"
+KEY_DIR = "keys"
+PRIVATE_KEY_FILE = f"{KEY_DIR}/private_key.pem"
+PUBLIC_KEY_FILE = f"{KEY_DIR}/public_key.pem"
 
-def generate_key():
+def generate_keys():
     """
-    Generates a key and save it into a file
+    Generates a new RSA public/private key pair and saves them to files.
     """
-    key = Fernet.generate_key()
-    with open(KEY_FILE, "wb") as key_file:
-        key_file.write(key)
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    public_key = private_key.public_key()
 
-def load_key():
-    """
-    Loads the key from the current directory named `secret.key`
-    """
-    return open(KEY_FILE, "rb").read()
+    # Serialize private key
+    pem_private = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
 
-def encrypt(message, key):
-    """
-    Encrypts a message
-    """
-    f = Fernet(key)
-    encrypted_message = f.encrypt(message.encode())
-    return encrypted_message
+    # Serialize public key
+    pem_public = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
 
-def decrypt(encrypted_message, key):
-    """
-    Decrypts an encrypted message
-    """
-    f = Fernet(key)
-    decrypted_message = f.decrypt(encrypted_message)
-    return decrypted_message.decode()
+    import os
+    os.makedirs(KEY_DIR, exist_ok=True)
 
-if __name__ == "__main__":
-    # Generate a key if one doesn't exist
+    with open(PRIVATE_KEY_FILE, 'wb') as f:
+        f.write(pem_private)
+
+    with open(PUBLIC_KEY_FILE, 'wb') as f:
+        f.write(pem_public)
+
+    return private_key, public_key
+
+def load_or_generate_keys():
+    """
+    Loads existing keys or generates new ones if they don't exist.
+    """
     try:
-        load_key()
+        with open(PRIVATE_KEY_FILE, 'rb') as f:
+            private_key = serialization.load_pem_private_key(
+                f.read(),
+                password=None,
+            )
+        with open(PUBLIC_KEY_FILE, 'rb') as f:
+            public_key = serialization.load_pem_public_key(
+                f.read(),
+            )
+        print("[*] Loaded existing RSA keys.")
+        return private_key, public_key
     except FileNotFoundError:
-        generate_key()
+        print("[*] No existing keys found. Generating new keys...")
+        return generate_keys()
 
-    key = load_key()
-    message = "This is a secret message"
-    encrypted = encrypt(message, key)
-    decrypted = decrypt(encrypted, key)
+def get_public_key_pem(public_key):
+    """
+    Returns the PEM-encoded string of a public key object.
+    """
+    return public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode('utf-8')
 
-    print(f"Original message: {message}")
-    print(f"Encrypted message: {encrypted}")
-    print(f"Decrypted message: {decrypted}")
+def sign_message(private_key, message):
+    """
+    Signs a message with the given private key.
+    Message should be a string.
+    Returns the signature in base64 format.
+    """
+    import base64
+    signature = private_key.sign(
+        message.encode('utf-8'),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+    return base64.b64encode(signature).decode('utf-8')
+
+def verify_signature(public_key_pem, signature, message):
+    """
+    Verifies the signature of a message using the sender's public key.
+    Returns True if the signature is valid, False otherwise.
+    """
+    import base64
+    try:
+        public_key = serialization.load_pem_public_key(
+            public_key_pem.encode('utf-8'),
+        )
+        signature_bytes = base64.b64decode(signature)
+        public_key.verify(
+            signature_bytes,
+            message.encode('utf-8'),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return True
+    except (InvalidSignature, ValueError):
+        return False
